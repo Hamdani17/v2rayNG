@@ -1,0 +1,52 @@
+name: Build yasser APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools ndk;27.2.12479018'
+
+    - name: Rename app to yasser
+      run: |
+        sed -i -E 's|()|\1yasser|' V2rayNG/app/src/main/res/values*/strings.xml
+
+    - name: Build hev tunnel libs
+      run: |
+        export NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
+        bash compile-hevtun.sh
+        cp -r libs V2rayNG/app/
+
+    - name: Download libv2ray.aar (Xray core)
+      run: |
+        mkdir -p V2rayNG/app/libs
+        TAG=$(git -C AndroidLibXrayLite describe --tags --abbrev=0)
+        curl -L -o V2rayNG/app/libs/libv2ray.aar \
+          https://github.com/2dust/AndroidLibXrayLite/releases/download/$TAG/libv2ray.aar
+
+    - name: Build APK
+      run: |
+        cd V2rayNG
+        echo "sdk.dir=${ANDROID_HOME}" > local.properties
+        chmod +x gradlew
+        ./gradlew assemblePlaystoreDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: yasser-apk
+        path: V2rayNG/app/build/outputs/apk/playstore/debug/*.apk
